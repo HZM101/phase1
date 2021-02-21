@@ -3,7 +3,7 @@
 
    CSCV 452
 
-   Hassan Martinez
+   @authors: Erik Ibarra Hurtado, Hassan Martinez, Victor Alvarez
 
    ------------------------------------------------------------------------ */
 #include <stdlib.h>
@@ -32,6 +32,7 @@ int block_me(int);
 int unblock_proc(int);
 int readtime(void);
 void clock_handler(int, void *);
+void mode_checker(char *func_name)
 
 /* -------------------------- Globals ------------------------------------- */
 
@@ -74,6 +75,7 @@ void startup()
    /* initialize the process table */
    for( i = 0; i < MAXPROC; i++)
    {
+      console("startup(): initializing process table, Proctable[]\n");
       ProcTable[i] = empty_struct;
    }
 
@@ -146,14 +148,12 @@ int fork1(char *name, int(*f)(char *), char *arg, int stacksize, int priority)
       console("fork1(): creating process %s\n", name);
 
    /* test if in kernel mode; halt if in user mode */
-   if ((PSR_CURRENT_MODE & psr_get()) == 0)
-   {
-      halt(1);
-   }
+   mode_checker("fork1()");
 
    /* Return if stack size is too small */
    if (stacksize < USLOSS_MIN_STACK)
    {
+      console("fork1(): Stack size is too small.\n");
       return (-2);
    }
 
@@ -330,6 +330,12 @@ int join(int *status)
    ------------------------------------------------------------------------ */
 void quit(int code)
 {
+   /* Testing for kernel mode. */
+   mode_checker("quit()");
+
+   // Calling dispatcher to switch to another process.
+   console("quit(): calling dispatcher\n");
+   dispatcher();
    p1_quit(Current->pid);
 } /* quit */
 
@@ -455,14 +461,9 @@ static void check_deadlock()
 /* Disables the interrupts. */
 void disableInterrupts()
 {
-  /* turn the interrupts OFF iff we are in kernel mode */
-  if((PSR_CURRENT_MODE & psr_get()) == 0) {
-    //not in kernel mode
-    console("Kernel Error: Not in kernel mode, may not disable interrupts\n");
-    halt(1);
-  } else
-    /* We ARE in kernel mode */
-    psr_set( psr_get() & ~PSR_CURRENT_INT );
+   mode_checker("disableInterrupts()");
+   /* We ARE in kernel mode */
+   psr_set( psr_get() & ~PSR_CURRENT_INT );
 } /* disableInterrupts */
 
 
@@ -483,6 +484,7 @@ void clock_handler(int dev, void *unit)
    {
       dispatcher();
    }
+   return;
 } /* clock_handler */
 
 
@@ -492,6 +494,68 @@ void clock_handler(int dev, void *unit)
    ---------------------------------------------------------------------------------*/
 int zap(int pid)
 {
+
+   int proc_slot = 0;
+
+   proc_ptr walker;
+
+   /* Searching PID to be zap. */
+   while(ProcTable[proc_slot].pid != pid)
+   {
+      proc_slot++;
+      /* If it reaches MAXPROC PID does not exist. */
+      if(proc_slot == MAXPROC)
+      {
+         console("zap(): Process does not exist\n");
+         halt(1);
+      }
+   }
+
+   /* If PID its the same to the Current PID */
+   if(ProcTable[proc_slot].pid == Current->pid)
+   {
+      console("zap(): Process tried to zap itself.\n");
+      halt(1);
+   }
+
+   /* Process in is_zapped is set to ZAPPED. */
+   ProcTable[proc_slot].is_zapped = ZAPPED;
+
+   /* Creating linked list of the zapper. */
+   if(ProcTable[proc_slot]->zapped_by_ptr == NULL)
+   {
+      ProcTable[proc_slot]-> zapped_by_ptr = Current;
+   }
+   else
+   {
+      walker = ProcTable[proc_slot]->zapped_by_ptr;
+      while(walker->next_zapper_ptr != NULL)
+      {
+         walker = walker->next_zapper_ptr;
+      }
+      walker->next_zapper_ptr = Current;
+   }
+
+   /* Blocking the process that call zap. */
+   Current->status = BLOCKED;
+
+   /* Zapped process called quit. */
+   if(ProcTable[proc_slot].status == QUIT){return 0;}
+
+   /* Calling dispatcher(); */
+   console("zap(): calling dispatcher\n");
+   dispatcher();
+
+   /* If the zapped process happen while in zap function. */
+   if(Current->is_zapped == ZAPPED)
+   {
+      console("zap(): This process was zapped while in the zap function.");
+      return -1;
+   }
+
+   /* Zapped process called quit. */
+   if(ProcTable[proc_slot].status == QUIT){return 0;}
+
    return 0;
 } /* zap */
 
@@ -636,7 +700,7 @@ static void removeFromRL(int PID)
    ------------------------------------------------------------------------------------*/
 void insert_child(proc_ptr child)
 {
-   /* Family tree (walker)if their is no empty space for child. */
+   /* Family tree (walker) if their is no empty space for child. */
    proc_ptr walker;
 
    /* Check for empty space to insert child. */
@@ -739,3 +803,16 @@ int readtime(void)
 {
    return (sys_clock() - Current->start_time) / 1000;
 } /* readtime */
+
+/* ---------------------------------------------------------------------------------
+   Name - mode_checker
+   Purpose - Check the mode if mode is in user mode halt(1).
+   ---------------------------------------------------------------------------------*/
+void mode_checker(char *func_name)
+{
+   if((PSR_CURRENT_MODE & psr_get()) == 0)
+   {
+      console("%s: called while in user mode, by process %d. halt(1)...\n", func_name, Current->pid);
+      halt(1);
+   }
+} /* mode_checker */
