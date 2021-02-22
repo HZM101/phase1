@@ -24,15 +24,14 @@ void dump_processes(void);
 static void insertRL(proc_ptr);
 int zap(int);
 int is_zapped(void);
+void de_zap(void);
 static void removeFromRL(int);
 extern void insert_child(proc_ptr);
-int check_io(void);
-int getpid(void);
 int block_me(int);
 int unblock_proc(int);
 int readtime(void);
 void clock_handler(int, void *);
-void mode_checker(char *func_name)
+void mode_checker();
 
 /* -------------------------- Globals ------------------------------------- */
 
@@ -330,13 +329,226 @@ int join(int *status)
    ------------------------------------------------------------------------ */
 void quit(int code)
 {
-   /* Testing for kernel mode. */
-   mode_checker("quit()");
+   console("Quitting for process %s\n", Current->name);
+   mode_checker("quit");
 
-   // Calling dispatcher to switch to another process.
-   console("quit(): calling dispatcher\n");
-   dispatcher();
-   p1_quit(Current->pid);
+   disableInterrupts();
+
+
+   // printf("Current Stack %s\n", Current->stack);
+   // free(Current->stack);
+
+   // Current->stack = NULL;
+   // Current->stacksize = 0;
+   
+
+   // Current->name = '\0';
+   // Current->start_arg = '\0';
+   Current->start_func = NULL;
+   Current->status = QUIT;
+   Current->exit_code = code;
+
+   // console("Reached\n");
+   // console("Freed current stack \n");
+    
+   // dump_processes();
+
+   if(Current->num_kids == 0) {
+      Current->child_proc_ptr = NULL;
+   }
+   if (Current->child_proc_ptr != NULL)
+   {
+      console("Number of kids %d\n", Current->num_kids);
+      console("quit(): process %d has active children.\nHalting..\n", Current->pid);
+      halt(1);
+   }
+
+   // if Current process is sentinel or start1, then they don't have a parent.
+   if(Current->pid == 1 || Current->pid == 2) {
+      // no parent has to join
+      Current->status == NO_CURRENT_PROCESS;
+
+      // if current process is startup
+      // Clean up since no more joining is happening
+      if (Current->pid == 2)
+      {
+         Current->child_proc_ptr = NULL;
+         Current->exit_code = 0;
+         Current->pid = -1;
+         Current->start_func = NO_CURRENT_PROCESS;
+         // Current->parent_ptr->pid = -1; 
+         Current->priority = -1;
+
+         Current = NULL;
+
+         de_zap();
+         dispatcher();
+
+         console("quit(): This shouldn't be seen.");
+         halt(1);
+      }
+   }
+   else {
+      console("Current pid is %d\n", Current->pid);
+      // removeFromRL(Current->pid);
+      console("Else reach\n");
+      Current->status = QUIT;
+
+      int proc_slot = 0;
+
+      console("remove from Rl\n");
+      // removing process from readyList
+      
+
+      console("remove reach\n");
+     
+      Current->parent_ptr->num_kids--;
+      if(Current->parent_ptr->num_kids == 0) {
+         console("Parent has zero children\n");
+         // Current->parent_ptr->child_proc_ptr = NULL;
+         // crucial line of code
+         Current->parent_ptr->child_proc_ptr->exit_code = code;
+         Current->parent_ptr->child_proc_ptr->pid = Current->pid;
+         
+         
+      }
+
+
+      Current->parent_ptr->child_proc_ptr->exit_code = code;
+      Current->parent_ptr->child_proc_ptr->pid = Current->pid;
+
+      Current->parent_ptr->status = READY;
+      insertRL(Current->parent_ptr);
+            
+      p1_quit(Current->pid);
+
+
+      // free(Current->stack);
+
+      Current->stack = NULL;
+      Current->stacksize = 0;
+      // Current->status = EMPTY;
+     
+      
+
+      // Where do we free memory ?????
+      
+      // int proc_slot1 = 0;
+
+   
+      // while (ProcTable[proc_slot1].pid != Current->pid)
+      // {
+      //    proc_slot1++;
+      //    if (proc_slot1 == MAXPROC)
+      //    {
+      //       console("p1_quit(): no pid in the process table.");
+      //    }
+      // }
+      
+      // ProcTable[proc_slot1].pid = NULL;
+      // free(ProcTable[proc_slot1].stack);
+
+   // Current->stack = NULL;
+   // Current->stacksize = 0;
+      
+      de_zap();
+      printf("Current exit status for process %s is %d\n", Current->name, Current->exit_code);
+      dispatcher();
+   } 
+     
+ 
+   // // if function returns successfully
+   // if (code == 0) {
+   //    if (Current->num_kids == 0 ) {  
+   //       // console("number of kids 0;\n");
+   //       if(Current->parent_ptr != NULL) {
+
+   //          int proc_slot = 0;
+
+   //          if(DEBUG && debugflag)
+   //          {
+   //             console("quit() called: pid = %d\n", Current->pid);
+   //          }
+
+   //          while (ProcTable[proc_slot].pid != Current->pid)
+   //          {
+   //             proc_slot++;
+   //             if (proc_slot == MAXPROC)
+   //             {
+   //                console("p1_quit(): no pid in the process table.");
+   //             }
+   //          }
+     
+   //          printf("Current pid = %d\n", Current->pid);
+   //          //    ProcTable[proc_slot].pid;
+
+   //          printf( "FOUND pid = %d\n", ProcTable[proc_slot].pid);
+
+   //          // updating proc_table
+   //          console("Parent = %s, %s, %d, %d, is zapped? = %d\n", Current->parent_ptr->name,Current->name, Current->pid, Current->priority, Current->is_zapped);
+            
+   //          // while(proc_slot < MAXPROC) {
+   //          //    ProcTable[proc_slot] = ProcTable[proc_slot + 1];
+   //          //    proc_slot++;
+               
+   //          // } 
+            
+   //          printf("Current pid after fixing table = %d\n", Current->pid);
+
+
+   //          // console("Status of quit %s\n", ProcTable[proc_slot].status);
+
+            
+   //          Current->status = QUIT;
+   //          Current->exit_code = -getpid();
+            
+   //          Current->parent_ptr->status = READY;
+   //          // Current->parent_ptr->num_kids--;
+            
+            
+   //          if(Current->parent_ptr->num_kids > 0) {
+   //             Current->parent_ptr->num_kids--;
+   //             Current->parent_ptr->child_proc_ptr->pid = Current->pid;
+   //          }
+            
+   //          // dump_processes();
+   //          if(Current->status == QUIT)
+   //          {
+   //             console("calling dispatcher after quiting process\n");
+   //             insertRL(Current->parent_ptr);
+   //             // removeFromRL(Current);
+   //             dispatcher();
+   //             // p1_quit(Current->pid);
+   //          }
+
+
+   //       }
+   //       else if(Current->parent_ptr == NULL) {
+   //          Current->status = QUIT;
+   //          // Current->exit_code = 0;
+           
+          
+   //          // dump_processes();
+   //          if(Current->status == QUIT)
+   //          {
+   //             // console("calling dispatcher after quiting process\n");
+           
+   //             dispatcher();
+   //          }
+   //       }
+            
+   //    }
+      
+   // }
+   // else {
+   //    printf("Current function fails to return");
+
+   // }
+   
+   
+   
+   // this quit kill a process.
+   // p1_quit(Current->pid);
 } /* quit */
 
 
@@ -433,10 +645,6 @@ int sentinel (char *dummy)
 /* check to determine if deadlock has occurred... */
 static void check_deadlock()
 {
-   if (check_io() == 1)
-   {
-      sentinel();
-   }
 
    /* Check PCB if any processes are active. */
    for( int i = 0; i < MAXPROC; i++)
@@ -482,6 +690,7 @@ void clock_handler(int dev, void *unit)
 {
    if (readtime() >= 80)
    {
+      console("clock_handler(): calling dispatcher().");
       dispatcher();
    }
    return;
@@ -521,7 +730,7 @@ int zap(int pid)
    /* Process in is_zapped is set to ZAPPED. */
    ProcTable[proc_slot].is_zapped = ZAPPED;
 
-   /* Creating linked list of the zapper. */
+   /* Creating linked list of the zapper. 
    if(ProcTable[proc_slot]->zapped_by_ptr == NULL)
    {
       ProcTable[proc_slot]-> zapped_by_ptr = Current;
@@ -535,7 +744,7 @@ int zap(int pid)
       }
       walker->next_zapper_ptr = Current;
    }
-
+*/
    /* Blocking the process that call zap. */
    Current->status = BLOCKED;
 
@@ -575,6 +784,49 @@ int is_zapped(void)
       return NOT_ZAPPED;
    }
 } /* is_zapped */
+
+/* ---------------------------------------------------------------------------------
+   Name - de_zap
+   Purpose - Unblock all zapped process.
+   ---------------------------------------------------------------------------------*/
+void de_zap(void)
+{
+   proc_ptr walker;
+   proc_ptr previous;
+
+   /* Quit if it is already clean. */
+   if(Current->zapped_by_ptr == NULL)
+   {
+      return;
+   }
+   else
+   {
+      /* Pointing to de_zap processes. */
+      walker = Current->zapped_by_ptr;
+      Current->zapped_by_ptr = NULL;
+
+      /* Not NULL then needs to be clean. */
+      while(walker->next_zapper_ptr != NULL)
+      {
+         /* Setting walker & previous to move around the list. */
+         previous = walker;
+         walker = walker->next_zapper_ptr;
+
+         /* Cleanning the process. */
+         previous->next_zapper_ptr = NULL;
+         /* Setting ready from cleanning. */
+         previous->status = READY;
+         /* Additing to the RL. */
+         insertRL(previous);
+      }
+   }
+
+   /* Final cleaning. */
+   walker->status = READY;
+   insertRL(walker);
+
+   return;
+} /* de_zap */
 
 
 /* ------------------------------------------------------------------------------
@@ -724,17 +976,6 @@ void insert_child(proc_ptr child)
 } /* insert_child */
 
 
-/* -------------------------------------------------------------------------------
-   Name - getpid
-   Purpose - returns the pid of current process
-   Returns -  The PID of the current running Process
-   -------------------------------------------------------------------------------*/
-int getpid(void)
-{
-   return Current->pid;
-} /* getpid */
-
-
 /* Blocks the calling process. */
 int block_me(int new_status)
 {
@@ -755,7 +996,7 @@ int block_me(int new_status)
    Current->status = BLOCKED;
    Current->blocked_status = new_status;
    return 0;
-}
+} /* block_me */
 
 
 /* -------------------------------------------------------------------------------
@@ -816,3 +1057,4 @@ void mode_checker(char *func_name)
       halt(1);
    }
 } /* mode_checker */
+
