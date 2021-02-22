@@ -74,7 +74,6 @@ void startup()
    /* initialize the process table */
    for( i = 0; i < MAXPROC; i++)
    {
-      console("startup(): initializing process table, Proctable[]\n");
       ProcTable[i] = empty_struct;
    }
 
@@ -122,7 +121,7 @@ void startup()
 void finish()
 {
    if (DEBUG && debugflag)
-      console("in finish...\n");
+      console("All processes completed.\n");
 } /* finish */
 
 
@@ -231,7 +230,7 @@ int fork1(char *name, int(*f)(char *), char *arg, int stacksize, int priority)
    /* call dispatcher - exception for sentinel */
    if (strcmp(ProcTable[proc_slot].name, "sentinel") != 0)
    {
-      console("fork1(): calling dispatcher\n");
+      //console("fork1(): calling dispatcher\n");
       dispatcher();
    }
    
@@ -299,7 +298,7 @@ int join(int *status)
    /* Ensuring the status is BLOCKED to call dispatcher. */
    if(Current->status == BLOCKED)
    {
-      console("join(): calling dispatcher\n");
+      //console("join(): calling dispatcher\n");
       dispatcher();
    }
 
@@ -329,226 +328,41 @@ int join(int *status)
    ------------------------------------------------------------------------ */
 void quit(int code)
 {
-   console("Quitting for process %s\n", Current->name);
-   mode_checker("quit");
-
-   disableInterrupts();
-
-
-   // printf("Current Stack %s\n", Current->stack);
-   // free(Current->stack);
-
-   // Current->stack = NULL;
-   // Current->stacksize = 0;
    
+   /* Testing kernel mode. */
+   mode_checker("quit()");
 
-   // Current->name = '\0';
-   // Current->start_arg = '\0';
-   Current->start_func = NULL;
-   Current->status = QUIT;
-   Current->exit_code = code;
-
-   // console("Reached\n");
-   // console("Freed current stack \n");
-    
-   // dump_processes();
-
-   if(Current->num_kids == 0) {
-      Current->child_proc_ptr = NULL;
-   }
+   /* Children calling quit. */
    if (Current->child_proc_ptr != NULL)
    {
-      console("Number of kids %d\n", Current->num_kids);
-      console("quit(): process %d has active children.\nHalting..\n", Current->pid);
+      //console("Number of kids %d\n", Current->num_kids);
+      //console("quit(): process %d has active children.\nHalting..\n", Current->pid);
       halt(1);
    }
 
-   // if Current process is sentinel or start1, then they don't have a parent.
-   if(Current->pid == 1 || Current->pid == 2) {
-      // no parent has to join
-      Current->status == NO_CURRENT_PROCESS;
+   /* Setting to QUIT. */
+   Current->status = QUIT;
 
-      // if current process is startup
-      // Clean up since no more joining is happening
-      if (Current->pid == 2)
-      {
-         Current->child_proc_ptr = NULL;
-         Current->exit_code = 0;
-         Current->pid = -1;
-         Current->start_func = NO_CURRENT_PROCESS;
-         // Current->parent_ptr->pid = -1; 
-         Current->priority = -1;
+   /* Cleanning. */
+   de_zap();
 
-         Current = NULL;
-
-         de_zap();
-         dispatcher();
-
-         console("quit(): This shouldn't be seen.");
-         halt(1);
-      }
-   }
-   else {
-      console("Current pid is %d\n", Current->pid);
-      // removeFromRL(Current->pid);
-      console("Else reach\n");
-      Current->status = QUIT;
-
-      int proc_slot = 0;
-
-      console("remove from Rl\n");
-      // removing process from readyList
-      
-
-      console("remove reach\n");
-     
-      Current->parent_ptr->num_kids--;
-      if(Current->parent_ptr->num_kids == 0) {
-         console("Parent has zero children\n");
-         // Current->parent_ptr->child_proc_ptr = NULL;
-         // crucial line of code
-         Current->parent_ptr->child_proc_ptr->exit_code = code;
-         Current->parent_ptr->child_proc_ptr->pid = Current->pid;
-         
-         
-      }
-
-
-      Current->parent_ptr->child_proc_ptr->exit_code = code;
-      Current->parent_ptr->child_proc_ptr->pid = Current->pid;
-
-      Current->parent_ptr->status = READY;
+   /* Unlock parent watting to join. */
+   if(Current->parent_ptr != NULL && Current->parent_ptr->status == BLOCKED)
+   {
+      Current->parent_ptr->status == READY;
       insertRL(Current->parent_ptr);
-            
-      p1_quit(Current->pid);
+   }
 
+   /* Seind quit code to parrent. */
+   if(Current->parent_ptr != NULL)
+   {
+      Current->parent_ptr->exit_code = code;
+      /* Deleting kid that quit. */
+      Current->parent_ptr->num_kids --;
+   }
 
-      // free(Current->stack);
-
-      Current->stack = NULL;
-      Current->stacksize = 0;
-      // Current->status = EMPTY;
-     
-      
-
-      // Where do we free memory ?????
-      
-      // int proc_slot1 = 0;
-
-   
-      // while (ProcTable[proc_slot1].pid != Current->pid)
-      // {
-      //    proc_slot1++;
-      //    if (proc_slot1 == MAXPROC)
-      //    {
-      //       console("p1_quit(): no pid in the process table.");
-      //    }
-      // }
-      
-      // ProcTable[proc_slot1].pid = NULL;
-      // free(ProcTable[proc_slot1].stack);
-
-   // Current->stack = NULL;
-   // Current->stacksize = 0;
-      
-      de_zap();
-      printf("Current exit status for process %s is %d\n", Current->name, Current->exit_code);
-      dispatcher();
-   } 
-     
- 
-   // // if function returns successfully
-   // if (code == 0) {
-   //    if (Current->num_kids == 0 ) {  
-   //       // console("number of kids 0;\n");
-   //       if(Current->parent_ptr != NULL) {
-
-   //          int proc_slot = 0;
-
-   //          if(DEBUG && debugflag)
-   //          {
-   //             console("quit() called: pid = %d\n", Current->pid);
-   //          }
-
-   //          while (ProcTable[proc_slot].pid != Current->pid)
-   //          {
-   //             proc_slot++;
-   //             if (proc_slot == MAXPROC)
-   //             {
-   //                console("p1_quit(): no pid in the process table.");
-   //             }
-   //          }
-     
-   //          printf("Current pid = %d\n", Current->pid);
-   //          //    ProcTable[proc_slot].pid;
-
-   //          printf( "FOUND pid = %d\n", ProcTable[proc_slot].pid);
-
-   //          // updating proc_table
-   //          console("Parent = %s, %s, %d, %d, is zapped? = %d\n", Current->parent_ptr->name,Current->name, Current->pid, Current->priority, Current->is_zapped);
-            
-   //          // while(proc_slot < MAXPROC) {
-   //          //    ProcTable[proc_slot] = ProcTable[proc_slot + 1];
-   //          //    proc_slot++;
-               
-   //          // } 
-            
-   //          printf("Current pid after fixing table = %d\n", Current->pid);
-
-
-   //          // console("Status of quit %s\n", ProcTable[proc_slot].status);
-
-            
-   //          Current->status = QUIT;
-   //          Current->exit_code = -getpid();
-            
-   //          Current->parent_ptr->status = READY;
-   //          // Current->parent_ptr->num_kids--;
-            
-            
-   //          if(Current->parent_ptr->num_kids > 0) {
-   //             Current->parent_ptr->num_kids--;
-   //             Current->parent_ptr->child_proc_ptr->pid = Current->pid;
-   //          }
-            
-   //          // dump_processes();
-   //          if(Current->status == QUIT)
-   //          {
-   //             console("calling dispatcher after quiting process\n");
-   //             insertRL(Current->parent_ptr);
-   //             // removeFromRL(Current);
-   //             dispatcher();
-   //             // p1_quit(Current->pid);
-   //          }
-
-
-   //       }
-   //       else if(Current->parent_ptr == NULL) {
-   //          Current->status = QUIT;
-   //          // Current->exit_code = 0;
-           
-          
-   //          // dump_processes();
-   //          if(Current->status == QUIT)
-   //          {
-   //             // console("calling dispatcher after quiting process\n");
-           
-   //             dispatcher();
-   //          }
-   //       }
-            
-   //    }
-      
-   // }
-   // else {
-   //    printf("Current function fails to return");
-
-   // }
-   
-   
-   
-   // this quit kill a process.
-   // p1_quit(Current->pid);
+   dispatcher();
+   p1_quit(Current->pid);
 } /* quit */
 
 
@@ -607,7 +421,6 @@ void dispatcher(void)
       {
          old_process->status = READY;
          insertRL(old_process);
-         console("\n");
       }
 
       /* Get time spent in porcessor for old_process and update pc_time. */
@@ -730,21 +543,21 @@ int zap(int pid)
    /* Process in is_zapped is set to ZAPPED. */
    ProcTable[proc_slot].is_zapped = ZAPPED;
 
-   /* Creating linked list of the zapper. 
-   if(ProcTable[proc_slot]->zapped_by_ptr == NULL)
+   /* Creating linked list of the zapper. */
+   if(ProcTable[proc_slot].zapped_by_ptr == NULL)
    {
-      ProcTable[proc_slot]-> zapped_by_ptr = Current;
+      ProcTable[proc_slot].zapped_by_ptr = Current;
    }
    else
    {
-      walker = ProcTable[proc_slot]->zapped_by_ptr;
+      walker = ProcTable[proc_slot].zapped_by_ptr;
       while(walker->next_zapper_ptr != NULL)
       {
          walker = walker->next_zapper_ptr;
       }
       walker->next_zapper_ptr = Current;
    }
-*/
+
    /* Blocking the process that call zap. */
    Current->status = BLOCKED;
 
@@ -752,7 +565,7 @@ int zap(int pid)
    if(ProcTable[proc_slot].status == QUIT){return 0;}
 
    /* Calling dispatcher(); */
-   console("zap(): calling dispatcher\n");
+   //console("zap(): calling dispatcher\n");
    dispatcher();
 
    /* If the zapped process happen while in zap function. */
@@ -784,6 +597,7 @@ int is_zapped(void)
       return NOT_ZAPPED;
    }
 } /* is_zapped */
+
 
 /* ---------------------------------------------------------------------------------
    Name - de_zap
@@ -837,42 +651,52 @@ void dump_processes(void)
 {
 
    console("\n-----------------------------------------dump_processes-----------------------------------------\n");
+   console("%-8s ", "Entry: ");
+   console("%-8s", "Name:  ");
+   console("%-8s", " PID: ");
+   console("%-16s", " Parent PID: ");
+  
+       
+   console("%-16s", "  # of Children: ");
+   console("%-17s", " CPU time (ms): "); 
+   console("%-16s\n", "Status: ");
 
    for(int i = 0; i < MAXPROC; i++)
    {
-      console("Entry %d:\n", i);
-      console("Name: %s\n", ProcTable[i].name);
-      console("PID: %d\n", ProcTable[i].pid);
+      console("%-8d ", i);
+      console("%-8s ", ProcTable[i].name);
+      console("%-8d ", ProcTable[i].pid);
 
       if(ProcTable[i].parent_ptr == NULL)
       {
-         console("Parent PID: N/A\n");
+         console("%-16s","N/A");
       }
       else
       {
-         console("Parent PID: %d\n", ProcTable[i].parent_ptr->pid);
+         console("%-16d", ProcTable[i].parent_ptr->pid);
       }
-      
-      console("# of Children: %d\n", ProcTable[i].num_kids);
-      console("CPU time: %d ms\n", ProcTable[i].start_time); 
+       
+      console("%-16d", ProcTable[i].num_kids);
+      console("%-17d", ProcTable[i].start_time); 
 
       switch(ProcTable[i].status)
       {
          case READY:
-            console("Status: READY\n");
+            console("%-16s", "READY");
             break;
          case BLOCKED:
-            console("Status: BLOCKED\n");
+            console("BLOCKED");
             break;
          case RUNNING:
-            console("Status: RUNNING");
+            console("%-16s", "RUNNING");
             break;
          case QUIT:
-            console("Status: QUIT\n");
+            console("QUIT");
             break;
          default:
-            console("Status: QUIT 'DEFAULT'\n");
+            console("-1\t");
       }
+      console("\n");
    }
 } /* dump_processes */
 
@@ -1044,6 +868,7 @@ int readtime(void)
 {
    return (sys_clock() - Current->start_time) / 1000;
 } /* readtime */
+
 
 /* ---------------------------------------------------------------------------------
    Name - mode_checker
